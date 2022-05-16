@@ -15,8 +15,7 @@ JsonRpcRequest _$JsonRpcRequestFromJson(Map<String, dynamic> json) {
   );
 }
 
-Map<String, dynamic> _$JsonRpcRequestToJson(JsonRpcRequest instance) =>
-    <String, dynamic>{
+Map<String, dynamic> _$JsonRpcRequestToJson(JsonRpcRequest instance) => <String, dynamic>{
       'id': instance.id,
       'jsonrpc': instance.jsonrpc,
       'method': _$WCMethodEnumMap[instance.method],
@@ -68,4 +67,5 @@ const _$WCMethodEnumMap = {
   WCMethod.ETH_SIGN_TYPE_DATA: 'eth_signTypedData',
   WCMethod.ETH_SIGN_TRANSACTION: 'eth_signTransaction',
   WCMethod.ETH_SEND_TRANSACTION: 'eth_sendTransaction',
+  WCMethod.WALLET_SWITCHETHEREUMCHAIN: 'wallet_switchEthereumChain',
 };
