@@ -131,6 +131,7 @@ class WCClient {
     int? chainId,
     bool approved = true,
   }) async {
+    if (chainId != null) _chainId = chainId;
     final param = WCSessionUpdate(
       approved: approved,
       chainId: chainId ?? _chainId,
