@@ -278,19 +278,19 @@ class WCClient {
   }
 
   _handleMessage(String payload) {
+    Map<String, dynamic> json = Map<String, dynamic>();
     try {
-      final request = JsonRpcRequest.fromJson(jsonDecode(payload));
+      json = jsonDecode(payload);
+      final request = JsonRpcRequest.fromJson(json);
       if (request.method != null) {
-        try {
-          _handleRequest(request);
-        } on ArgumentError catch (argumentError) {
-          rejectRequest(id: request.id, message: argumentError.message);
-        }
+        _handleRequest(request);
       } else {
         onCustomRequest?.call(request.id, payload);
       }
     } on InvalidJsonRpcParamsException catch (e) {
       _invalidParams(e.requestId);
+    } on ArgumentError catch (argumentError) {
+      rejectRequest(id: json['id'], message: argumentError.message);
     }
   }
 
