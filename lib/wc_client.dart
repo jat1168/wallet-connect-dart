@@ -281,7 +281,11 @@ class WCClient {
     try {
       final request = JsonRpcRequest.fromJson(jsonDecode(payload));
       if (request.method != null) {
-        _handleRequest(request);
+        try {
+          _handleRequest(request);
+        } on ArgumentError catch (argumentError) {
+          rejectRequest(id: request.id, message: argumentError.message);
+        }
       } else {
         onCustomRequest?.call(request.id, payload);
       }
