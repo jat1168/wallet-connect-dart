@@ -347,7 +347,7 @@ class WCClient {
         break;
       case WCMethod.ETH_SIGN_TYPE_DATA:
       case WCMethod.ETH_SIGN_TYPE_DATA_V3:
-      case WCMethod.ETH_SIGN_TYPE_DATA_V4:
+        // case WCMethod.ETH_SIGN_TYPE_DATA_V4:
         print('ETH_SIGN_TYPE_DATA $request');
         final params = request.params!.cast<String>();
         if (params.length < 2) {
