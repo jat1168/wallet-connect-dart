@@ -1,14 +1,17 @@
 import 'dart:convert';
 
 import 'package:eth_sig_util/eth_sig_util.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wallet_connect/wallet_connect.dart';
-import 'package:wallet_connect_example/eth_conversions.dart';
-import 'package:wallet_connect_example/qr_scan_view.dart';
+import 'package:wallet_connect_example/utils/constants.dart';
+import 'package:wallet_connect_example/utils/eth_conversions.dart';
+import 'package:wallet_connect_example/widgets/input_field.dart';
+import 'package:wallet_connect_example/widgets/qr_scan_view.dart';
+import 'package:wallet_connect_example/widgets/session_request_view.dart';
+import 'package:wallet_connect_example/widgets/update_session_view.dart';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart';
 
@@ -38,29 +41,26 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-const maticRpcUri =
-    'https://rpc-mainnet.maticvigil.com/v1/140d92ff81094f0f3d7babde06603390d7e581be';
+const rpcUri = 'https://rpc-mainnet.maticvigil.com/v1/140d92ff81094f0f3d7babde06603390d7e581be';
 
 enum MenuItems {
   PREVIOUS_SESSION,
+  UPDATE_SESSION,
   KILL_SESSION,
   SCAN_QR,
   PASTE_CODE,
   CLEAR_CACHE,
+  GOTO_URL,
 }
 
 class _MyHomePageState extends State<MyHomePage> {
   late WCClient _wcClient;
   late SharedPreferences _prefs;
   late InAppWebViewController _webViewController;
-  late TextEditingController _textEditingController;
   late String walletAddress, privateKey;
   bool connected = false;
   WCSessionStore? _sessionStore;
-  final _web3client = Web3Client(
-    maticRpcUri,
-    http.Client(),
-  );
+  final _web3client = Web3Client(rpcUri, http.Client());
 
   @override
   void initState() {
@@ -78,11 +78,10 @@ class _MyHomePageState extends State<MyHomePage> {
       onEthSendTransaction: _onSendTransaction,
       onCustomRequest: (_, __) {},
       onConnect: _onConnect,
+      onWalletSwitchNetwork: _onSwitchNetwork,
     );
-    // TODO: Mention walletAddress and privateKey while connecting
-    walletAddress = '';
-    privateKey = '';
-    _textEditingController = TextEditingController();
+    walletAddress = WALLET_ADDRESS;
+    privateKey = PRIVATE_KEY;
     _prefs = await SharedPreferences.getInstance();
   }
 
@@ -97,6 +96,30 @@ class _MyHomePageState extends State<MyHomePage> {
               switch (item) {
                 case MenuItems.PREVIOUS_SESSION:
                   _connectToPreviousSession();
+                  break;
+                case MenuItems.UPDATE_SESSION:
+                  if (_wcClient.isConnected) {
+                    showGeneralDialog(
+                      context: context,
+                      barrierDismissible: true,
+                      barrierLabel: 'Update Session',
+                      pageBuilder: (context, _, __) => UpdateSessionView(
+                        client: _wcClient,
+                        address: walletAddress,
+                      ),
+                    ).then((value) {
+                      if (value != null && (value as List).isNotEmpty) {
+                        _wcClient.updateSession(
+                          chainId: value[0] as int,
+                          accounts: [value[1] as String],
+                        );
+                      }
+                    });
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Not connected.'),
+                    ));
+                  }
                   break;
                 case MenuItems.KILL_SESSION:
                   _wcClient.killSession();
@@ -113,44 +136,38 @@ class _MyHomePageState extends State<MyHomePage> {
                   break;
                 case MenuItems.PASTE_CODE:
                   showGeneralDialog(
-                      context: context,
-                      barrierDismissible: true,
-                      barrierLabel: 'Paste Code',
-                      pageBuilder: (context, _, __) {
-                        return SimpleDialog(
-                          title: Text('Paste code to connect'),
-                          titlePadding:
-                              const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, .0),
-                          contentPadding: const EdgeInsets.all(16.0),
-                          children: [
-                            TextField(
-                              controller: _textEditingController,
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(),
-                                label: Text('Enter Code'),
-                              ),
-                            ),
-                            const SizedBox(height: 16.0),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: Text('CONTINUE'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      }).then((_) {
-                    if (_textEditingController.text.isNotEmpty) {
-                      _qrScanHandler(_textEditingController.text);
-                      _textEditingController.clear();
+                    context: context,
+                    barrierDismissible: true,
+                    barrierLabel: 'Paste Code',
+                    pageBuilder: (context, _, __) => InputDialog(
+                      title: 'Paste code to connect',
+                      label: 'Enter Code',
+                    ),
+                  ).then((value) {
+                    if (value != null && (value as String).isNotEmpty) {
+                      _qrScanHandler(value);
                     }
                   });
                   break;
                 case MenuItems.CLEAR_CACHE:
                   _webViewController.clearCache();
+                  break;
+                case MenuItems.GOTO_URL:
+                  showGeneralDialog(
+                    context: context,
+                    barrierDismissible: true,
+                    barrierLabel: 'Goto URL',
+                    pageBuilder: (context, _, __) => InputDialog(
+                      title: 'Enter URL to open',
+                      label: 'Enter URL',
+                    ),
+                  ).then((value) {
+                    if (value != null && (value as String).isNotEmpty) {
+                      _webViewController.loadUrl(
+                        urlRequest: URLRequest(url: Uri.parse(value)),
+                      );
+                    }
+                  });
                   break;
               }
             },
@@ -159,6 +176,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 PopupMenuItem(
                   value: MenuItems.PREVIOUS_SESSION,
                   child: Text('Connect Previous Session'),
+                ),
+                PopupMenuItem(
+                  value: MenuItems.UPDATE_SESSION,
+                  child: Text('Update Session'),
                 ),
                 PopupMenuItem(
                   value: MenuItems.KILL_SESSION,
@@ -176,14 +197,17 @@ class _MyHomePageState extends State<MyHomePage> {
                   value: MenuItems.CLEAR_CACHE,
                   child: Text('Clear Cache'),
                 ),
+                PopupMenuItem(
+                  value: MenuItems.GOTO_URL,
+                  child: Text('Goto URL'),
+                ),
               ];
             },
           ),
         ],
       ),
       body: InAppWebView(
-        initialUrlRequest:
-            URLRequest(url: Uri.parse('https://example.walletconnect.org')),
+        initialUrlRequest: URLRequest(url: Uri.parse('https://example.walletconnect.org')),
         initialOptions: InAppWebViewGroupOptions(
           crossPlatform: InAppWebViewOptions(
             useShouldOverrideUrlLoading: true,
@@ -193,13 +217,14 @@ class _MyHomePageState extends State<MyHomePage> {
           _webViewController = controller;
         },
         shouldOverrideUrlLoading: (controller, navAction) async {
-          final uri = navAction.request.url;
-          final url = uri.toString();
+          final url = navAction.request.url.toString();
           debugPrint('URL $url');
-          if (url.startsWith('wc:')) {
-            if (url.contains('bridge') && url.contains('key')) {
-              _qrScanHandler(url);
-            }
+          if (url.contains('wc?uri=')) {
+            final wcUri = Uri.parse(Uri.decodeFull(Uri.parse(url).queryParameters['uri']!));
+            _qrScanHandler(wcUri.toString());
+            return NavigationActionPolicy.CANCEL;
+          } else if (url.startsWith('wc:')) {
+            _qrScanHandler(url);
             return NavigationActionPolicy.CANCEL;
           } else {
             return NavigationActionPolicy.ALLOW;
@@ -210,25 +235,23 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   _qrScanHandler(String value) {
-    final session = WCSession.from(value);
-    debugPrint('session $session');
-    final peerMeta = WCPeerMeta(
-      name: "Example Wallet",
-      url: "https://example.wallet",
-      description: "Example Wallet",
-      icons: [
-        "https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png"
-      ],
-    );
-    _wcClient.connectNewSession(session: session, peerMeta: peerMeta);
+    if (value.contains('bridge') && value.contains('key')) {
+      final session = WCSession.from(value);
+      debugPrint('session $session');
+      final peerMeta = WCPeerMeta(
+        name: "Example Wallet",
+        url: "https://example.wallet",
+        description: "Example Wallet",
+        icons: ["https://gblobscdn.gitbook.com/spaces%2F-LJJeCjcLrr53DcT1Ml7%2Favatar.png"],
+      );
+      _wcClient.connectNewSession(session: session, peerMeta: peerMeta);
+    }
   }
 
   _connectToPreviousSession() {
     final _sessionSaved = _prefs.getString('session');
     debugPrint('_sessionSaved $_sessionSaved');
-    _sessionStore = _sessionSaved != null
-        ? WCSessionStore.fromJson(jsonDecode(_sessionSaved))
-        : null;
+    _sessionStore = _sessionSaved != null ? WCSessionStore.fromJson(jsonDecode(_sessionSaved)) : null;
     if (_sessionStore != null) {
       debugPrint('_sessionStore $_sessionStore');
       _wcClient.connectFromSessionStore(_sessionStore!);
@@ -245,76 +268,33 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  _onSwitchNetwork(int id, int chainId) async {
+    await _wcClient.updateSession(chainId: chainId);
+    _wcClient.approveRequest<Null>(id: id, result: null);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Changed network to $chainId.'),
+    ));
+  }
+
   _onSessionRequest(int id, WCPeerMeta peerMeta) {
     showDialog(
       context: context,
-      builder: (_) {
-        return SimpleDialog(
-          title: Column(
-            children: [
-              if (peerMeta.icons.isNotEmpty)
-                Container(
-                  height: 100.0,
-                  width: 100.0,
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Image.network(peerMeta.icons.first),
-                ),
-              Text(peerMeta.name),
-            ],
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 16.0),
-          children: [
-            if (peerMeta.description.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(peerMeta.description),
-              ),
-            if (peerMeta.url.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text('Connection to ${peerMeta.url}'),
-              ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      primary: Colors.white,
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                    ),
-                    onPressed: () async {
-                      _wcClient.approveSession(
-                        accounts: [walletAddress],
-                        // TODO: Mention Chain ID while connecting
-                        chainId: 1,
-                      );
-                      _sessionStore = _wcClient.sessionStore;
-                      await _prefs.setString('session',
-                          jsonEncode(_wcClient.sessionStore.toJson()));
-                      Navigator.pop(context);
-                    },
-                    child: Text('APPROVE'),
-                  ),
-                ),
-                const SizedBox(width: 16.0),
-                Expanded(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      primary: Colors.white,
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                    ),
-                    onPressed: () {
-                      _wcClient.rejectSession();
-                      Navigator.pop(context);
-                    },
-                    child: Text('REJECT'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
+      builder: (_) => SessionRequestView(
+        peerMeta: peerMeta,
+        onApprove: (chainId) async {
+          _wcClient.approveSession(
+            accounts: [walletAddress],
+            chainId: chainId,
+          );
+          _sessionStore = _wcClient.sessionStore;
+          await _prefs.setString('session', jsonEncode(_wcClient.sessionStore.toJson()));
+          Navigator.pop(context);
+        },
+        onReject: () {
+          _wcClient.rejectSession();
+          Navigator.pop(context);
+        },
+      ),
     );
   }
 
@@ -409,8 +389,6 @@ class _MyHomePageState extends State<MyHomePage> {
           _wcEthTxToWeb3Tx(ethereumTransaction),
           chainId: _wcClient.chainId!,
         );
-        // final txhash = await _web3client.sendRawTransaction(tx);
-        // debugPrint('txhash $txhash');
         _wcClient.approveRequest<String>(
           id: id,
           result: bytesToHex(tx),
@@ -460,36 +438,9 @@ class _MyHomePageState extends State<MyHomePage> {
     required VoidCallback onConfirm,
     required VoidCallback onReject,
   }) async {
-    ContractFunction? contractFunction;
     BigInt gasPrice = BigInt.parse(ethereumTransaction.gasPrice ?? '0');
-    try {
-      final abiUrl =
-          'https://api.polygonscan.com/api?module=contract&action=getabi&address=${ethereumTransaction.to}&apikey=BCER1MXNFHP1TVE93CMNVKC5J4FV8R4CPR';
-      final res = await http.get(Uri.parse(abiUrl));
-      final Map<String, dynamic> resMap = jsonDecode(res.body);
-      final abi = ContractAbi.fromJson(resMap['result'], '');
-      final contract = DeployedContract(
-          abi, EthereumAddress.fromHex(ethereumTransaction.to));
-      final dataBytes = hexToBytes(ethereumTransaction.data);
-      final funcBytes = dataBytes.take(4).toList();
-      debugPrint("funcBytes $funcBytes");
-      final maibiFunctions = contract.functions
-          .where((element) => listEquals<int>(element.selector, funcBytes));
-      if (maibiFunctions.isNotEmpty) {
-        debugPrint("isNotEmpty");
-        contractFunction = maibiFunctions.first;
-        debugPrint("function ${contractFunction.name}");
-        // contractFunction.parameters.forEach((element) {
-        //   debugPrint("params ${element.name} ${element.type.name}");
-        // });
-        // final params = dataBytes.sublist(4).toList();
-        // debugPrint("params $params ${params.length}");
-      }
-      if (gasPrice == BigInt.zero) {
-        gasPrice = await _web3client.estimateGas();
-      }
-    } catch (e, trace) {
-      debugPrint("failed to decode\n$e\n$trace");
+    if (gasPrice == BigInt.zero) {
+      gasPrice = await _web3client.estimateGas();
     }
     showDialog(
       context: context,
@@ -592,30 +543,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               ),
             ),
-            if (contractFunction != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Function',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16.0,
-                      ),
-                    ),
-                    const SizedBox(height: 8.0),
-                    Text(
-                      '${contractFunction.name}',
-                      style: TextStyle(fontSize: 16.0),
-                    ),
-                  ],
-                ),
-              ),
             Theme(
-              data:
-                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: ExpansionTile(
@@ -671,9 +600,6 @@ class _MyHomePageState extends State<MyHomePage> {
     int id,
     WCEthereumSignMessage ethereumSignMessage,
   ) {
-    final decoded = (ethereumSignMessage.type == WCSignType.TYPED_MESSAGE)
-        ? ethereumSignMessage.data!
-        : ascii.decode(hexToBytes(ethereumSignMessage.data!));
     showDialog(
       context: context,
       builder: (_) {
@@ -710,8 +636,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             ),
             Theme(
-              data:
-                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: ExpansionTile(
@@ -725,7 +650,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   children: [
                     Text(
-                      decoded,
+                      ethereumSignMessage.data!,
                       style: TextStyle(fontSize: 16.0),
                     ),
                   ],
@@ -742,8 +667,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     onPressed: () async {
                       String signedDataHex;
-                      if (ethereumSignMessage.type ==
-                          WCSignType.TYPED_MESSAGE) {
+                      if (ethereumSignMessage.type == WCSignType.TYPED_MESSAGE) {
                         signedDataHex = EthSigUtil.signTypedData(
                           privateKey: privateKey,
                           jsonData: ethereumSignMessage.data!,
@@ -751,10 +675,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         );
                       } else {
                         final creds = EthPrivateKey.fromHex(privateKey);
-                        final encodedMessage =
-                            hexToBytes(ethereumSignMessage.data!);
-                        final signedData =
-                            await creds.signPersonalMessage(encodedMessage);
+                        final encodedMessage = hexToBytes(ethereumSignMessage.data!);
+                        final signedData = await creds.signPersonalMessage(encodedMessage);
                         signedDataHex = bytesToHex(signedData, include0x: true);
                       }
                       debugPrint('SIGNED $signedDataHex');
@@ -792,18 +714,13 @@ class _MyHomePageState extends State<MyHomePage> {
   Transaction _wcEthTxToWeb3Tx(WCEthereumTransaction ethereumTransaction) {
     return Transaction(
       from: EthereumAddress.fromHex(ethereumTransaction.from),
-      to: EthereumAddress.fromHex(ethereumTransaction.to),
-      maxGas: ethereumTransaction.gasLimit != null
-          ? int.tryParse(ethereumTransaction.gasLimit!)
-          : null,
-      gasPrice: ethereumTransaction.gasPrice != null
-          ? EtherAmount.inWei(BigInt.parse(ethereumTransaction.gasPrice!))
-          : null,
+      to: EthereumAddress.fromHex(ethereumTransaction.to!),
+      maxGas: ethereumTransaction.gasLimit != null ? int.tryParse(ethereumTransaction.gasLimit!) : null,
+      gasPrice:
+          ethereumTransaction.gasPrice != null ? EtherAmount.inWei(BigInt.parse(ethereumTransaction.gasPrice!)) : null,
       value: EtherAmount.inWei(BigInt.parse(ethereumTransaction.value ?? '0')),
-      data: hexToBytes(ethereumTransaction.data),
-      nonce: ethereumTransaction.nonce != null
-          ? int.tryParse(ethereumTransaction.nonce!)
-          : null,
+      data: hexToBytes(ethereumTransaction.data!),
+      nonce: ethereumTransaction.nonce != null ? int.tryParse(ethereumTransaction.nonce!) : null,
     );
   }
 }

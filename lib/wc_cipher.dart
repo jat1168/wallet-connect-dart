@@ -35,8 +35,7 @@ class WCCipher {
     print('Nonce: ${secretBox.nonce}');
     print('Ciphertext: ${secretBox.cipherText}');
     print('MAC: ${secretBox.mac.bytes}');
-    final computedHmac =
-        await _computeHmac(secretBox.cipherText, secretBox.nonce, _keyBytes);
+    final computedHmac = await _computeHmac(secretBox.cipherText, secretBox.nonce, _keyBytes);
     final encryptedData = HEX.encode(secretBox.cipherText);
     return WCEncryptionPayload(
       data: encryptedData,
@@ -45,8 +44,7 @@ class WCCipher {
     );
   }
 
-  static Future<Mac> _computeHmac(
-      List<int> data, List<int> iv, List<int> key) async {
+  static Future<Mac> _computeHmac(List<int> data, List<int> iv, List<int> key) async {
     final hmac = Hmac.sha256();
     final payload = data + iv;
     final mac = await hmac.calculateMac(payload, secretKey: SecretKey(key));

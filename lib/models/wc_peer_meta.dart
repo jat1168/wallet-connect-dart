@@ -16,8 +16,7 @@ class WCPeerMeta {
     this.icons = const [],
   });
 
-  factory WCPeerMeta.fromJson(Map<String, dynamic> json) =>
-      _$WCPeerMetaFromJson(json);
+  factory WCPeerMeta.fromJson(Map<String, dynamic> json) => _$WCPeerMetaFromJson(json);
 
   Map<String, dynamic> toJson() => _$WCPeerMetaToJson(this);
 
