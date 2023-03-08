@@ -90,8 +90,8 @@ class WCClient {
   connectFromSessionStore(
     WCSessionStore sessionStore, {
     HttpClient? customHttpClient,
-  }) {
-    _connect(
+  }) async {
+    await _connect(
       fromSessionStore: true,
       session: sessionStore.session,
       peerMeta: sessionStore.peerMeta,
@@ -260,12 +260,16 @@ class WCClient {
   _listen() {
     _socketStream.listen(
       (event) async {
-        print('DATA: $event ${event.runtimeType}');
-        final Map<String, dynamic> decoded = json.decode("$event");
-        print('DECODED: $decoded ${decoded.runtimeType}');
-        final socketMessage = WCSocketMessage.fromJson(jsonDecode("$event"));
-        final decryptedMessage = await _decrypt(socketMessage);
-        _handleMessage(decryptedMessage);
+        try {
+          print('DATA: $event ${event.runtimeType}');
+          final Map<String, dynamic> decoded = json.decode("$event");
+          print('DECODED: $decoded ${decoded.runtimeType}');
+          final socketMessage = WCSocketMessage.fromJson(jsonDecode("$event"));
+          final decryptedMessage = await _decrypt(socketMessage);
+          _handleMessage(decryptedMessage);
+        } catch (e) {
+          print(e.toString());
+        }
       },
       onError: (error) {
         print('onError $_isConnected CloseCode ${_webSocket.closeCode} $error');
